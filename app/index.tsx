@@ -5,11 +5,10 @@ import * as Location from 'expo-location';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 
-import { connectDB } from '../src/database';
+import { connectDB, Codigo } from '../src/database';
 
-interface ScannedCode {
-    code: BarcodeScanningResult,
-    location: Location.LocationObject
+interface ScannedCode extends Codigo {
+    location: Location.LocationObject | null;
 }
 
 export default function ScannerScreen() {
@@ -19,38 +18,58 @@ export default function ScannerScreen() {
     const [permission, requestPermission] = useCameraPermissions();
     const [scannedCodes, setScannedCodes] = useState<ScannedCode[]>([]);
 
-    const onBarcodeScanned = async function (result: BarcodeScanningResult) {
+    const onBarcodeScanned = async (result: BarcodeScanningResult) => {
+        const db = await connectDB();
+        await db.insertarCodigo(result.data, result.type);
+
+        const codigos = await db.consultarCodigos();
+        const formateados: ScannedCode[] = codigos.map(c => ({
+            ...c,
+            location: location
+        }));
+        setScannedCodes(formateados);
+
         if (window) {
             window.alert(result.data);
         } else {
             Alert.alert(result.data);
         }
-
-        setScannedCodes(prev => [{ code: result, location: location! }, ...prev]);
-
-        const db = await connectDB();
-        await db.insertarCodigo(result.data, result.type);
-        console.log(await db.consultarCodigos());
     };
 
     useEffect(() => {
         async function getCurrentLocation() {
-            let { status } = await Location.requestForegroundPermissionsAsync();
+            const { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
                 setErrorMsg('Permiso a la ubicación denegado');
                 return;
             }
 
-            let currentLocation = await Location.getCurrentPositionAsync();
+            const currentLocation = await Location.getCurrentPositionAsync();
             setLocation(currentLocation);
         }
+
+        async function cargarCodigosGuardados() {
+            const db = await connectDB();
+            const codigos = await db.consultarCodigos();
+            const formateados: ScannedCode[] = codigos.map(c => ({
+                ...c,
+                location: null
+            }));
+            setScannedCodes(formateados);
+        }
+
         getCurrentLocation();
+        cargarCodigosGuardados();
     }, []);
 
-    if (!permission) {
-        return <View />;
-    }
+    const borrarTodo = async () => {
+        const db = await connectDB();
+        await db.eliminarTodos();
+        setScannedCodes([]);
+        Alert.alert("Todos los códigos han sido eliminados");
+    };
 
+    if (!permission) return <View />;
     if (!permission.granted) {
         return (
             <View>
@@ -61,32 +80,21 @@ export default function ScannerScreen() {
     }
 
     let text = 'Cargando...';
-    if (errorMsg) {
-        text = errorMsg;
-    } else if (location) {
-        text = JSON.stringify(location);
-    }
+    if (errorMsg) text = errorMsg;
+    else if (location) text = JSON.stringify(location);
 
-    const ScannedItem = function ({ item }: { item: ScannedCode }) {
-        const onCopyPressed = function () {
-            Clipboard.setStringAsync(item.code.data);
-        };
-
-        return (
-            <View style={styles.item}>
-                <Text>{item.code.data}</Text>
-                <TouchableOpacity onPress={onCopyPressed}>
-                    <Text style={styles.copyText}>Copiar</Text>
-                </TouchableOpacity>
-                {item.location && (
-                    <>
-                        <Text>{item.location.timestamp}</Text>
-                        <Text>Lat: {item.location.coords.latitude}, Long: {item.location.coords.longitude}</Text>
-                    </>
-                )}
-            </View>
-        );
-    };
+    const ScannedItem = ({ item }: { item: ScannedCode }) => (
+        <View style={styles.item}>
+            <Text>{item.data}</Text>
+            <TouchableOpacity onPress={() => Clipboard.setStringAsync(item.data)}>
+                <Text style={styles.copyText}>Copiar</Text>
+            </TouchableOpacity>
+            <Text>{new Date(item.timestamp).toLocaleString()}</Text>
+            {item.location && (
+                <Text>Lat: {item.location.coords.latitude}, Long: {item.location.coords.longitude}</Text>
+            )}
+        </View>
+    );
 
     return (
         <View style={styles.container}>
@@ -95,13 +103,14 @@ export default function ScannerScreen() {
                 style={styles.cameraView}
                 facing={facing}
                 barcodeScannerSettings={{
-                    barcodeTypes: ["qr", "code128", "datamatrix", "aztec", "ean13"]
+                    barcodeTypes: ['qr', 'code128', 'datamatrix', 'aztec', 'ean13'],
                 }}
                 onBarcodeScanned={onBarcodeScanned}
             />
+            <Button title="Borrar todos los códigos" onPress={borrarTodo} />
             <FlatList
                 data={scannedCodes}
-                keyExtractor={(item) => item.location?.timestamp.toString()}
+                keyExtractor={(item) => item.timestamp.toString()}
                 renderItem={ScannedItem}
             />
         </View>
@@ -129,5 +138,5 @@ const styles = StyleSheet.create({
     copyText: {
         color: 'blue',
         marginTop: 5,
-    }
+    },
 });

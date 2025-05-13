@@ -1,50 +1,36 @@
-import * as SQLite from 'expo-sqlite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export async function connectDB()
-{
-    return new Database(
-        await SQLite.openDatabaseAsync('ScanQR')
-    );
+export interface Codigo {
+    data: string;
+    type: string;
+    timestamp: number;
 }
 
-class Database
-{
-    constructor(private db: SQLite.SQLiteDatabase)
-    {
-        this.init();
-    }
-    private async init()
-    {
-        await this.dropDB();
-        await this.db.execAsync(
-            `CREATE TABLE IF NOT EXISTS codigos (
-                id TEXT PRIMARY KEY NOT NULL DEFAULT (lower(hex(randomblob(16)))),
-                data TEXT NOT NULL DEFAULT '',
-                type TEXT NOT NULL DEFAULT 'qr'
-            )`
-        );
-    }
-    async dropDB()
-    {
-        await this.db.execAsync('DROP TABLE IF EXISTS codigos');
-    }
-
-    async  insertarCodigo(data:string, type:string)
-    {
-        const result = await this.db.runAsync(
-            'INSERT INTO codigos (data, type) VALUES (?, ?)', data, type
-        );
-        return result;
-    }
-
-    async consultarCodigos()
-    {
-        const result = await this.db.getAllAsync<{id:string, data:string, type:string}>(
-            'SELECT * FROM codigos'
-        );
-        return result;
-    }
+export async function connectDB() {
+    return new Database();
 }
 
+class Database {
+    private key = 'codigos';
 
+    async insertarCodigo(data: string, type: string) {
+        const nuevo: Codigo = {
+            data,
+            type,
+            timestamp: Date.now(),
+        };
 
+        const existentes = await this.consultarCodigos();
+        existentes.unshift(nuevo); // Agrega al inicio
+        await AsyncStorage.setItem(this.key, JSON.stringify(existentes));
+    }
+
+    async consultarCodigos(): Promise<Codigo[]> {
+        const json = await AsyncStorage.getItem(this.key);
+        return json ? JSON.parse(json) : [];
+    }
+
+    async eliminarTodos() {
+        await AsyncStorage.removeItem(this.key);
+    }
+}
