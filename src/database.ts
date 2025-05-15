@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { ScannedCode } from './models';
 
 export async function connectDB()
 {
@@ -7,11 +8,14 @@ export async function connectDB()
     );
 }
 
-class Database
+export class Database
 {
     constructor(private db: SQLite.SQLiteDatabase)
     {
         this.init();
+    }
+    close(){
+        this.db.closeAsync();
     }
     private async init()
     {
@@ -39,7 +43,7 @@ class Database
 
     async consultarCodigos()
     {
-        const result = await this.db.getAllAsync<{id:string, data:string, type:string}>(
+        const result = await this.db.getAllAsync<ScannedCode>(
             'SELECT * FROM codigos'
         );
         return result;

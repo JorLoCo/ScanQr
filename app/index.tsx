@@ -1,16 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { Text, View, StyleSheet, Button, Alert, FlatList, TouchableOpacity } from 'react-native';
 
 import * as Location from 'expo-location';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 
+import { ScannedCode } from '../src/models';
 import { connectDB } from '../src/database';
-
-interface ScannedCode {
-    code: BarcodeScanningResult,
-    location: Location.LocationObject
-}
+import { Database } from '../src/database';
 
 export default function ScannerScreen() {
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
@@ -18,6 +15,7 @@ export default function ScannerScreen() {
     const [facing, setFacing] = useState<CameraType>('back');
     const [permission, requestPermission] = useCameraPermissions();
     const [scannedCodes, setScannedCodes] = useState<ScannedCode[]>([]);
+    const [db, setDB] = useState<Database>();
 
     const onBarcodeScanned = async function (result: BarcodeScanningResult) {
         if (window) {
@@ -26,11 +24,12 @@ export default function ScannerScreen() {
             Alert.alert(result.data);
         }
 
-        setScannedCodes(prev => [{ code: result, location: location! }, ...prev]);
+        // const db = await connectDB();
 
-        const db = await connectDB();
+        if(!db) return;
+
         await db.insertarCodigo(result.data, result.type);
-        console.log(await db.consultarCodigos());
+        setScannedCodes(await db.consultarCodigos());
     };
 
     useEffect(() => {
@@ -44,8 +43,32 @@ export default function ScannerScreen() {
             let currentLocation = await Location.getCurrentPositionAsync();
             setLocation(currentLocation);
         }
+        async function connectToDB() {
+            const db = await connectDB();
+            setScannedCodes(await db.consultarCodigos());
+        }
         getCurrentLocation();
+        connectToDB();
     }, []);
+
+    useEffect(() => {
+        (async () => {
+            setDB(await connectDB());
+        })();
+    }, []);
+
+    useEffect(() => {
+        if (!db) return;
+
+        (async () => {
+            setScannedCodes(await db.consultarCodigos());
+        })();
+        
+        return () => {
+            db.close();
+        }
+
+    }, [db]);
 
     if (!permission) {
         return <View />;
@@ -67,23 +90,23 @@ export default function ScannerScreen() {
         text = JSON.stringify(location);
     }
 
-    const ScannedItem = function ({ item }: { item: ScannedCode }) {
+    const ScannedItem = function ({ item }: { item:ScannedCode }) {
         const onCopyPressed = function () {
-            Clipboard.setStringAsync(item.code.data);
+            Clipboard.setStringAsync(item.data);
         };
 
         return (
             <View style={styles.item}>
-                <Text>{item.code.data}</Text>
+                <Text>{item.data}</Text>
                 <TouchableOpacity onPress={onCopyPressed}>
                     <Text style={styles.copyText}>Copiar</Text>
                 </TouchableOpacity>
-                {item.location && (
+                {/* {item.location && (
                     <>
                         <Text>{item.location.timestamp}</Text>
                         <Text>Lat: {item.location.coords.latitude}, Long: {item.location.coords.longitude}</Text>
                     </>
-                )}
+                )} */}
             </View>
         );
     };
@@ -101,7 +124,7 @@ export default function ScannerScreen() {
             />
             <FlatList
                 data={scannedCodes}
-                keyExtractor={(item) => item.location?.timestamp.toString()}
+                keyExtractor={(item) => item.id}
                 renderItem={ScannedItem}
             />
         </View>
@@ -127,7 +150,7 @@ const styles = StyleSheet.create({
         borderColor: '#ccc',
     },
     copyText: {
-        color: 'blue',
+        color: '#15A67A',
         marginTop: 5,
     }
 });
