@@ -4,6 +4,16 @@ import { Text, View, StyleSheet, Button, Alert, FlatList, TouchableOpacity } fro
 import * as Location from 'expo-location';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, CameraType, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+    })
+});
 
 import { ScannedCode } from '../src/models';
 import { connectDB } from '../src/database';
@@ -90,6 +100,16 @@ export default function ScannerScreen() {
         text = JSON.stringify(location);
     }
 
+    const showNotification = async function () {
+        Notifications.scheduleNotificationAsync({
+            content: {
+                title: 'Hola',
+                body: 'Q onda, k aze'
+            },
+            trigger: null
+        });
+    }
+
     const ScannedItem = function ({ item }: { item:ScannedCode }) {
         const onCopyPressed = function () {
             Clipboard.setStringAsync(item.data);
@@ -97,6 +117,7 @@ export default function ScannerScreen() {
 
         return (
             <View style={styles.item}>
+                <Button title='Mostrar notificacion' onPress={showNotification}/>
                 <Text>{item.data}</Text>
                 <TouchableOpacity onPress={onCopyPressed}>
                     <Text style={styles.copyText}>Copiar</Text>
