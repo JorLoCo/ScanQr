@@ -37,7 +37,8 @@
     "@types/express": "^5.0.1",
     "@types/react": "~19.0.10",
     "@types/sqlite3": "^3.1.11",
-    "typescript": "^5.3.3"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   },
   "private": true
 }
